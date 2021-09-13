@@ -32,12 +32,12 @@ def argparser():
     return parser.parse_args()
 
 
-def get_test_failure_profile(content: str, profile: str):
+def get_link_to_log(content: str):
     content = re.search("(http.*)", content)
     if content:
-        linkto_logs = "[Link to logs|" + content.groups()[0] + "]|" + profile
+        linkto_logs = content.groups()[0]
     else:
-        linkto_logs = f"not found|{profile}"
+        linkto_logs = f"not found"
     return linkto_logs
 
 
@@ -84,30 +84,39 @@ def main():
             profile = profile.groups()[0]
             for record in output["records"]["TestRecord"]:
                 if record["result"] == "Failed":
-                    linkto_logs = get_test_failure_profile(
-                        record["comment"]["content"], profile
-                    )
+                    linkto_logs = get_link_to_log(record["comment"]["content"])
                     automation_script = get_automation_script(
                         record["test_case"]["customFields"]["Custom"]
                     )
                     id = record["test_case"]["id"]
                     owner = get_owner(automation_script, id)
+                    failed_test_attrs = dict(
+                        [
+                            ("logs", linkto_logs),
+                            ("profile", profile),
+                        ]
+                    )
                     if report_struct.get(owner, 0):
                         if report_struct[owner].get(automation_script, 0):
                             if report_struct[owner][automation_script].get(id, 0):
-                                report_struct[owner][automation_script][id].append(
-                                    linkto_logs
-                                )
+                                report_struct[owner][automation_script][id][
+                                    "logs"
+                                ] = linkto_logs
+                                report_struct[owner][automation_script][id][
+                                    "profile"
+                                ] = profile
                             else:
                                 report_struct[owner][automation_script].update(
-                                    {id: [linkto_logs]}
+                                    {id: failed_test_attrs}
                                 )
                         else:
                             report_struct[owner].update(
-                                {automation_script: {id: [linkto_logs]}}
+                                {automation_script: {id: failed_test_attrs}}
                             )
                     else:
-                        report_struct[owner] = {automation_script: {id: [linkto_logs]}}
+                        report_struct[owner] = {
+                            automation_script: {id: failed_test_attrs}
+                        }
 
     write_output(report_struct, args.output)
 
